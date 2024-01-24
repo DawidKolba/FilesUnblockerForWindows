@@ -1,95 +1,66 @@
 ﻿using FilesUnblockerForWindows;
-using System.Windows.Forms;
+using FilesUnblockerForWindows.Helpers;
 
-SystemHelper.LoadSettings();
-
-
-string txt = Clipboard.GetText(TextDataFormat.UnicodeText).ToString();
-
-bool extraUnblock = false;
-if (Directory.Exists(txt))
+class Program
 {
-    Console.WriteLine("Detected following path to directory in clipboard: \n" + txt);
-    string odp;
-    if (askIfUnlockDirFromClipboard)
+    static readonly NLog.Logger _logger = NLog.LogManager.GetCurrentClassLogger();
+
+    [STAThread]
+    static void Main(string[] args)
     {
-        Console.WriteLine("Would you like to unblock files in this directory with recursive scan?(y/n)");
-        odp = Console.ReadLine().ToString();
-    }
-    else
-    {
-        odp = "y";
-    }
-    if (odp.ToLower() == "y")
-    {
-        Console.WriteLine("Extra unblock is active");
-        extraUnblock = true;
-    }
-    else
-    {
+        SystemHelper.LoadSettings();
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
 
-    }
-    //Console.WriteLine("wprowadzona odp: " + odp);
-
-}
-
-
-loguj("Application started");
-if (UsingRecursiveScan)
-{
-    loguj("Using recursive scan");
-    searchDirectory();
-    searchDirectory(Directory.GetCurrentDirectory());
-
-    if (extraUnblock)
-    {
-
-        try
+        static void log(string message)
         {
-            Console.WriteLine("extra unblock started");
-            searchDirectory(txt, true);
+            Console.WriteLine(message);
+
+            if (Options.CreateLogFile)
+                _logger.Info(message);
         }
-        catch { }
-    }
-    if (argScan)
-    {
 
-        try
-        {
-            Console.WriteLine("unblock files from paths given by cmd parameters started");
-            searchDirectory(args[0], true);
-        }
-        catch { }
-    }
-}
-else
-{
-    loguj("Without recursive scan");
-    searchDirectory();
-    if (extraUnblock)
-    {
+        bool extraUnblock = false;
+        string getDirectoryFromClipboard = Clipboard.GetText(TextDataFormat.UnicodeText);
 
-        try
+        if (Directory.Exists(getDirectoryFromClipboard))
         {
-            Console.WriteLine("extra unblock started2");
-            searchDirectory(txt, true);
-        }
-        catch { }
-        if (argScan)
-        {
+            Console.WriteLine("Detected following path to directory in clipboard: \n" + getDirectoryFromClipboard);
+            string answer = "y";
 
-            try
+            if (Options.AskIfUnlockDirFromClipboard)
             {
-                Console.WriteLine("unblock files from paths given by cmd parameters started");
-                searchDirectory(args[0], true);
+                Console.WriteLine("Would you like to unblock files in this directory with recursive scan?(y/n)");
+                answer = Console.ReadLine();
             }
-            catch { }
+
+            if (answer?.ToLower() == "y")
+            {
+                Console.WriteLine("Extra unblock is active");
+                extraUnblock = true;
+            }
+        }
+
+        log("Application started");
+        FilesUnblocker.SearchDirectory(Directory.GetCurrentDirectory());
+
+        if (extraUnblock)
+        {
+            FilesUnblocker.SearchDirectory(getDirectoryFromClipboard);
+        }
+
+        if (args.Length > 0)
+        {
+            Console.WriteLine("Unblocking files from paths given by cmd parameters started");
+            FilesUnblocker.SearchDirectory(args[0]);
+        }
+
+        log($"Changed {Counters.UnblockFilesCounter} files. Checked {Counters.CheckedFilesCounter} files. Have a nice day ;)");
+
+        if (!Options.FastMode)
+        {
+            Console.WriteLine("Press any key to exit");
+            Console.ReadKey();
         }
     }
-}
-loguj("Changed " + counterUnblockFiles + " files. Checked " + counterCheckedFiles + " files. Have a nice day ;)");
-if (!FastMode)
-{
-    Console.WriteLine("Press any key to exit");
-    Console.ReadKey();
 }

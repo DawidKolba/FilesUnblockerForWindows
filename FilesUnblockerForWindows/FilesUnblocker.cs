@@ -1,5 +1,5 @@
 ﻿using System.Runtime.InteropServices;
-
+using FilesUnblockerForWindows.Helpers;
 
 namespace FilesUnblockerForWindows
 {
@@ -10,9 +10,27 @@ namespace FilesUnblockerForWindows
         private static extern bool DeleteFile(string name);
         private static readonly NLog.Logger _logger = NLog.LogManager.GetCurrentClassLogger();
 
-        private static async Task<bool> Unblock(string fileName)
+
+        private static async Task<bool> UnblockAsync(string fileName)
         {
-            return DeleteFile(fileName + ":Zone.Identifier");
+            string zoneIdentifierPath = fileName + ":Zone.Identifier";
+
+            if (File.Exists(zoneIdentifierPath))
+            {
+                try
+                {
+                    File.Delete(zoneIdentifierPath);
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    if (Options.CreateLogFile)
+                        _logger.Info(ex, "Exception");
+                    return false;
+                }
+            }
+
+            return false; // Zone.Identifier not found or already removed
         }
 
         public static async Task SearchDirectory(string directoryPath)
@@ -20,12 +38,17 @@ namespace FilesUnblockerForWindows
             try
             {
                 string[] files = Directory.GetFiles(directoryPath);
+
                 foreach (string file in files)
                 {
                     await ProcessFile(file);
                 }
 
+                if (!Options.UseRecursiveScan)
+                    return;
+
                 string[] directories = Directory.GetDirectories(directoryPath);
+
                 foreach (string dir in directories)
                 {
                     await SearchDirectory(dir);
@@ -40,12 +63,45 @@ namespace FilesUnblockerForWindows
 
         private static async Task ProcessFile(string filePath)
         {
-            if (Options.LogAlsoAlreadyUnblockedFiles)
+            try
             {
+                Counters.CheckedFilesCounter++;
                 if (Options.CreateLogFile)
                     _logger.Info($"Current processing file: {filePath}");
+
+                string zoneIdentifierPath = filePath + ":Zone.Identifier";
+
+                if (File.Exists(zoneIdentifierPath))
+                {
+                    var status = await UnblockAsync(filePath);
+                    Task.Run(async () =>
+                    {
+                        if (Options.WriteLogToConsole)
+                            await Console.Out.WriteLineAsync($"File: {filePath} is blocked!");
+
+                        if (Options.CreateLogFile)
+                        {
+                            _logger.Info($"File: {filePath} is blocked!");
+                            _logger.Info($"Unblocking status: {status}");
+                        }
+                    }).GetAwaiter().GetResult();
+
+                    Counters.UnblockFilesCounter++;
+                }
+                else
+                {
+                    if (Options.LogAlsoAlreadyUnblockedFiles)
+                    {
+                        if (Options.CreateLogFile)
+                            _logger.Info($"This file isn't blocked: {filePath}");
+                    }
+                }
             }
-            await Unblock(filePath);
+            catch (Exception ex)
+            {
+                if (Options.CreateLogFile)
+                    _logger.Error(ex, "Exception on unblocking file");
+            }
         }
     }
 }
